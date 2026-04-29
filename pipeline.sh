@@ -3,7 +3,7 @@
 # Exit on error
 set -euo pipefail
 
-## DIRECTORIES
+######################### DIRECTORIES ####################
 
 # Define pipeline root path
 PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,12 +16,12 @@ OUTPUT_DIR="${PIPELINE_DIR}/output"
 # Create OUTPUT directory
 mkdir -p "${OUTPUT_DIR}"
 
-## CONFIG
+######################### CONFIG #########################
 
 # Load user configuration
 source "${PIPELINE_DIR}/config.sh"
 
-## PIPELINE
+######################### PIPELINE #######################
 
 echo
 echo "RUNNING qc pipeline..."
@@ -44,7 +44,7 @@ echo "  1_fastqc.sh SUBMITTED"
 echo
 echo "  SUBMITTING 2_multiqc.sh"
 
-# Run multiqc
+# Submit multiqc
 MULTIQC=$(
     sbatch \
     --parsable \
