@@ -1,0 +1,9 @@
+name: env_qc
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  - python>=3.8
+  - multiqc
+  - matplotlib
