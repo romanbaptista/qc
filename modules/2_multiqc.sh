@@ -17,7 +17,7 @@ source /etc/profile.d/modules.sh
 # Navigate to pipeline root path
 cd "${PIPELINE_DIR}"
 # Define INPUT directory
-MULTIQC_INPUT_DIR="${PIPELINE_DIR}/output/1_fastqc"
+INPUT_DIR="${PIPELINE_DIR}/output/1_fastqc"
 # Define OUTPUT directory path
 OUTPUT_DIR="${PIPELINE_DIR}/output/2_multiqc"
 # Create output directory
@@ -27,19 +27,14 @@ LOGFILE="${OUTPUT_DIR}/multiqc_log.log"
 # Redirect .out/.err logs to LOGFILE
 exec >"${LOGFILE}" 2>&1
 
-######################### CONFIG #########################
-
-# Load user configuration
-source "${PIPELINE_DIR}/config.sh"
-
-######################### CHECKs #########################
+######################### CHECKS #########################
 
 # Check for FASTQC output
 shopt -s nullglob
-FASTQC_FILES=("${MULTIQC_INPUT_DIR}"/*_fastqc.zip)
+FASTQC_FILES=("${INPUT_DIR}"/*_fastqc.zip)
 
 if [[ ${#FASTQC_FILES[@]} -eq 0 ]]; then
-    echo "ERROR: No FastQC ZIP files found in ${MULTIQC_INPUT_DIR}"
+    echo "ERROR: No FastQC ZIP files found in ${INPUT_DIR}"
     exit 1
 fi
 
@@ -52,23 +47,25 @@ module load apps/anaconda-4.7.12.tcl
 
 echo
 echo "RUNNING 2_multiqc.sh"
-echo "  Input directory:    ${MULTIQC_INPUT_DIR}"
+echo "  Input directory:    ${INPUT_DIR}"
 echo "  CPUs allocated:     ${SLURM_CPUS_PER_TASK}"
 echo
 
 echo "  Checking for conda environment"
 
-# Enable conda for non-interactive shells
+# Enable conda in non-interactive shell
+set +u
 eval "$(conda shell.bash hook)"
-# Define environment name
+set -u
+
+# Define conda environment name
 CONDA_ENV="env_qc"
 
-# Create environment if it doesn't exist
+# Check if env is present
 if ! conda info --envs | awk '{print $1}' | grep -qx "${CONDA_ENV}"; then
-    echo
-    echo "  Conda environment '${CONDA_ENV}' not found. Creating from YAML"
-    conda env create -f env_qc.yaml
-    echo "  Conda environment created"
+    echo "  ERROR: Conda environment '${CONDA_ENV}' not found."
+    echo "  pipeline.sh should have created this environment."
+    exit 1
 fi
 
 echo
