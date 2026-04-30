@@ -52,8 +52,8 @@ module load apps/anaconda-4.7.12.tcl
 
 echo
 echo "RUNNING 2_multiqc.sh"
-echo "  Input directory: ${INPUT_DIR}"
-echo "  CPUs allocated: ${SLURM_CPUS_PER_TASK}"
+echo "  Input directory:    ${INPUT_DIR}"
+echo "  CPUs allocated:     ${SLURM_CPUS_PER_TASK}"
 echo
 
 echo "  Checking for conda environment"

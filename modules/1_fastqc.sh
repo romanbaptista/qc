@@ -14,8 +14,8 @@ source /etc/profile.d/modules.sh
 
 ######################### DIRECTORIES ####################
 
-# Define pipeline root path
-PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Navigate to pipeline root path
+cd "${PIPELINE_DIR}"
 # Define OUTPUT directory path
 OUTPUT_DIR="${PIPELINE_DIR}/output/1_fastqc"
 # Create output directory
@@ -31,7 +31,6 @@ exec >"${LOGFILE}" 2>&1
 source "${PIPELINE_DIR}/config.sh"
 
 ######################### CHECKS #########################
-
 
 if [[ -z "${INPUT_DIR}" || ! -d "${INPUT_DIR}" ]]; then
     echo "ERROR: INPUT_DIR is not set or does not exist: ${INPUT_DIR}"
