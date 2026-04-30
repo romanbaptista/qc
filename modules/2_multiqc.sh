@@ -17,7 +17,7 @@ source /etc/profile.d/modules.sh
 # Navigate to pipeline root path
 cd "${PIPELINE_DIR}"
 # Define INPUT directory
-INPUT_DIR="${PIPELINE_DIR}/output/1_fastqc"
+MULTIQC_INPUT_DIR="${PIPELINE_DIR}/output/1_fastqc"
 # Define OUTPUT directory path
 OUTPUT_DIR="${PIPELINE_DIR}/output/2_multiqc"
 # Create output directory
@@ -36,10 +36,10 @@ source "${PIPELINE_DIR}/config.sh"
 
 # Check for FASTQC output
 shopt -s nullglob
-FASTQC_FILES=("${INPUT_DIR}"/*_fastqc.zip)
+FASTQC_FILES=("${MULTIQC_INPUT_DIR}"/*_fastqc.zip)
 
 if [[ ${#FASTQC_FILES[@]} -eq 0 ]]; then
-    echo "ERROR: No FastQC ZIP files found in ${INPUT_DIR}"
+    echo "ERROR: No FastQC ZIP files found in ${MULTIQC_INPUT_DIR}"
     exit 1
 fi
 
@@ -52,7 +52,7 @@ module load apps/anaconda-4.7.12.tcl
 
 echo
 echo "RUNNING 2_multiqc.sh"
-echo "  Input directory:    ${INPUT_DIR}"
+echo "  Input directory:    ${MULTIQC_INPUT_DIR}"
 echo "  CPUs allocated:     ${SLURM_CPUS_PER_TASK}"
 echo
 
