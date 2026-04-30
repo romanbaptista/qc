@@ -38,12 +38,17 @@ YAML_FILE="${PIPELINE_DIR}/env_qc.yaml"
 
 # Create environment if it doesn't exist
 if ! conda info --envs | awk '{print $1}' | grep -qx "${CONDA_ENV}"; then
+    
     echo
     echo "  Conda environment '${CONDA_ENV}' not found"
     echo "  Creating environment from ${YAML_FILE}"
     echo "  This may take 30 minutes+ the first time"
+    echo "  Please wait..."
+
     conda env create -f "${YAML_FILE}"
+
     echo "  Conda environment created"
+    
 fi
 
 ######################### PIPELINE #######################
