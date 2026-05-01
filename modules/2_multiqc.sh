@@ -78,6 +78,11 @@ conda activate "${CONDA_ENV}"
 # Remove PYTHONPATH from current shell to avoid cluster-wide Python settings
 unset PYTHONPATH
 
+# Define temporary directory path
+export TEMP_DIR="${OUTPUT_DIR}/.tmp"
+# Generate temporary directory path
+mkdir -p "${TEMP_DIR}"
+
 echo "  Running multiQC"
 echo
 
@@ -95,6 +100,9 @@ echo
 
 # Deactivate conda
 conda deactivate
+
+# Delete temporary directory
+#rm -r "${TEMP_DIR}"
 
 echo "2_multiqc.sh COMPLETE"
 echo
