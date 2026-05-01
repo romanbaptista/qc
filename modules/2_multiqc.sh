@@ -14,8 +14,6 @@ source /etc/profile.d/modules.sh
 
 ######################### DIRECTORIES ####################
 
-# Resolve pipeline root relative to this script's location
-PIPELINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Navigate to pipeline root path
 cd "${PIPELINE_DIR}"
 # Define INPUT directory
