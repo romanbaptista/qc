@@ -6,4 +6,6 @@ channels:
 dependencies:
   - python>=3.8
   - multiqc
-  - matplotlib
+  - matplotlib 
+  - click>=8.1
+  - rich-click<1.7
