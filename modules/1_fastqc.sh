@@ -4,7 +4,7 @@
 #SBATCH --error=/dev/null
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
-#SBATCH --mem-per-cpu=8GB
+#SBATCH --mem-per-cpu=8G
 
 # Exit on error
 set -euo pipefail

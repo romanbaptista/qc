@@ -58,6 +58,7 @@ echo "RUNNING qc pipeline..."
 echo "User configuration from config.sh:"
 echo "  Input directory:        ${INPUT_DIR}"
 echo "  FASTQC threads:         ${FASTQC_CPUS}"
+echo "  Memory per thread:      ${FASTQC_MEM_PER_CPU}"
 echo
 
 echo "  Checking for env_qc conda environment"
@@ -70,6 +71,7 @@ echo "  SUBMITTING 1_fastqc.sh"
 FASTQC=$(
     sbatch \
     --cpus-per-task="${FASTQC_CPUS}" \
+    --mem-per-cpu="${FASTQC_MEM_PER_CPU}" \
     --parsable \
     "${MODULES_DIR}/1_fastqc.sh"
 )
@@ -83,6 +85,7 @@ MULTIQC=$(
     sbatch \
     --parsable \
     --cpus-per-task="${MULTIQC_CPUS}" \
+    --mem-per-cpu="${MULTIQC_MEM_PER_CPU}" \
     --dependency=afterok:"${FASTQC}" \
     "${MODULES_DIR}/2_multiqc.sh"
 ) || {
