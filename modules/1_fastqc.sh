@@ -64,15 +64,6 @@ find "${INPUT_DIR}" -type f -name "*.fastq.gz" | while read -r FASTQ_FILE; do
     "${FASTQ_FILE}"
 done
 
-# # Run fastqc
-# for FASTQ_FILE in "${INPUT_DIR}"/*fq.gz; do
-#     fastqc \
-#     -t $FASTQC_NUM_THREADS \
-#     --noextract \
-#     --outdir "${OUTPUT_DIR}" \
-#     "${FASTQ_FILE}"
-# done
-
 echo
 echo "1_fastqc.sh COMPLETE"
 echo

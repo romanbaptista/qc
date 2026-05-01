@@ -102,7 +102,7 @@ echo
 conda deactivate
 
 # Delete temporary directory
-#rm -r "${TEMP_DIR}"
+rm -r "${TEMP_DIR}"
 
 echo "2_multiqc.sh COMPLETE"
 echo
