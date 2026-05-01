@@ -95,5 +95,5 @@ MULTIQC=$(
 
 echo "  2_multiqc.sh SUBMITTED"
 echo
-echo "  Pipeline submitted successfully"
+echo "Pipeline submitted SUCCESSFULLY"
 echo
