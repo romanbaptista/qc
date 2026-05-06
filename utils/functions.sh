@@ -140,28 +140,3 @@ check_executable() {
         return 0
     fi
 }
-
-# check_tmux_session
-# Verifies that a tmux session exists.
-# Arguments:
-#   $1 - tmux session name
-# Returns:
-#   0 if session exists
-#   1 if not found (prints error to stderr)
-# Example:
-# check_tmux_session session_name || {
-#     echo "Some extra info"
-#     exit 1
-# }
-
-check_tmux_session() {
-    local name="$1"
-
-    if tmux has-session -t "${name}" 2>/dev/null; then
-        echo "  tmux session found: ${name}"
-        return 0
-    else
-        echo "  tmux session not found"
-        return 1
-    fi
-}
