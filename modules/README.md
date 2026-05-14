@@ -1,148 +1,176 @@
-# Pipeline Modules
+# `modules`
+This directory contains the execution modules for the `fastq-qc` pipeline.
 
-This directory contains the implementation modules for the QC pipeline.
+Each module is responsible for exactly one execution role and operates under a strict, preflight‑validated contract designed for HPC environments where compute‑intensive work must be offloaded to the scheduler.
 
-Each module is responsible for exactly one pipeline stage and may be safely rerun if previous outputs already exist.
-
-Modules are executed under SLURM and coordinated by `modules/pipeline.sh`, which is submitted by `run_pipeline.sh` after all preflight checks and environment setup have completed.
+Modules are coordinated by `modules/pipeline.sh`, which is submitted by `run_pipeline.sh` only after all preflight checks have completed successfully.
 
 # Design Contract
-
-All modules adhere to the following principles:
+All modules in this directory adhere to the following principles:
 - Single responsibility per script
-- Explicit input and output locations
-- Fail‑fast preflight checks
-- Restart‑safe behavior
-- Deterministic execution under SLURM
-- No reliance on implicit global system state
+- Explicit, absolute input and output paths
+- Strong separation between validation and execution
+- Restart‑safe behaviour where possible
+- Deterministic execution model
+- No reliance on implicit working directories
+- No reliance on undeclared global state
+- No duplication of preflight validation logic
+- Assumption that all preflight invariants have already been enforced
+- Strict consumption of the execution ABI (`EXPORT_ARRAY`)
 
-# Execution Order
+Modules do not perform input validation, environment setup, or configuration checks.
 
-Modules are executed in the order defined for validation in `utils/variables.sh`.
+All such guarantees are established by the preflight layer and enforced via guarded environment variables.
 
-The current pipeline consists of the following modules:
+# Execution Model
+`fastq-qc` is a scheduler‑backed pipeline:
+- Orchestration logic runs on the login node
+- Execution modules run as SLURM jobs on compute nodes
+- Execution behaviour is controlled via an explicit environment contract
+
+The execution flow is:
 ```text
-conda_env.sh
-1_fastqc.sh
-2_multiqc.sh
+run_pipeline.sh
+  └─ pipeline.sh
+       ├─ 1_fastqc.sh
+       └─ 2_multiqc.sh
 ```
 
-Execution order and SLURM resource allocation are explicitly defined in `modules/pipeline.sh`.
+Modules are executed sequentially using SLURM job dependencies, ensuring that downstream aggregation only occurs after successful completion of upstream processing.
+
+All SLURM submissions occur only after successful preflight validation.
 
 # Module Overview
-
 ## `pipeline.sh`
+Internal orchestrator for the `fastq-qc` pipeline.
 
-Internal SLURM orchestrator for the QC pipeline.
-
-### Workflow
-- Sources shared configuration and utilities
-- Validates the presence of all required module scripts
-- Submits FastQC and MultiQC jobs with explicit SLURM resources
-- Enforces strict execution order using SLURM job dependencies
-- Writes high‑level pipeline output to `logs/pipeline.<jobid>.log`
-- Aborts immediately if any job submission fails
-
-`pipeline.sh` is not intended to be executed directly by end users.
-
-## `conda_env.sh`
-
-Creates and verifies the conda environment required for MultiQC.
-
-### Inputs
-Both inputs are pipeline constants, defined in `utils/variables.sh`
-- Conda environment YAML file
-- Conda environment name
+### Role
+- `pipeline.sh` coordinates submission of downstream execution modules.
+- It is not intended to be executed directly by end users.
 
 ### Workflow
-- Validates the presence of the environment YAML file
-- Loads the system anaconda module
-- Initializes conda in a non‑interactive shell
-- Checks whether the required environment already exists
-- Creates the environment from the YAML file if missing
-- Writes progress and diagnostic output to `logs/conda_env.log`
-- Touches a completion sentinel file (`.conda_env_ready`) on success
+- Runs as a SLURM job submitted by `run_pipeline.sh`
+- Guards all required variables defined in the execution ABI
+- Assumes all preflight checks have succeeded
+- Submits the FastQC job (`1_fastqc.sh`)
+- Submits the MultiQC job (`2_multiqc.sh`) with a strict afterok dependency on FastQC
+- Passes the execution ABI (`SBATCH_EXPORTS`) to all downstream jobs
+- Captures submitted job IDs for dependency chaining and diagnostics
 
 ### Guarantees
-- Idempotent (safe to rerun)
-- Does not recreate environments unnecessarily
-- Does not modify global system conda installations
-- Safe to run inside or outside a tmux session
+- Deterministic orchestration
+- Strict SLURM dependency enforcement (`afterok`)
+- No mutation of the execution ABI
+- No data processing
+- No tool execution beyond job submission
+- No duplication of preflight logic
 
 ## `1_fastqc.sh`
+Execution module for FASTQ quality control using FastQC.
 
-Runs FastQC on all compressed FASTQ files in the user‑specified input directory.
+### Role
+Processes all `.fastq.gz` files discovered within the input directory and generates individual FastQC reports.
 
 ### Inputs
-- INPUT_DIR (from `config.sh`)
-- SLURM resources (defined in `pipeline.sh`)
-- FastQC system module
+- FASTQ files discovered recursively under `INPUT_DIR`
+- Pipeline-owned variables (`FASTQC_OUTDIR`)
+- SLURM‑injected variables (`SLURM_CPUS_PER_TASK`, `SLURM_MEM_PER_CPU`)
+- Execution ABI (`EXPORT_ARRAY`, `SBATCH_EXPORTS`)
+
+### Expected Input Layout
+The pipeline does not enforce a strict directory structure. Any `.fastq.gz` files located beneath `INPUT_DIR` will be processed. Example:
+
+```text
+INPUT_DIR/
+├── sample1.fastq.gz
+├── sample2.fastq.gz
+```
+
+or, as generated by the `sra-convert` pipeline:
+
+```text
+INPUT_DIR/
+└── SRRXXXXXXXX/
+    ├── SRRXXXXXXXX_1.fastq.gz
+    ├── SRRXXXXXXXX_2.fastq.gz
+```
 
 ### Workflow
-- Validates the input directory and presence of .fastq.gz files
-- Loads the FastQC module within the SLURM job
-- Iterates through all FASTQ files
-- Runs FastQC using the CPUs allocated by SLURM
-- Writes all output to a dedicated stage directory
+- Recursively discovers all `.fastq.gz` files within the input directory
+- Processes each FASTQ file independently
+- Executes FastQC using SLURM-allocated resources
+- Writes all outputs to a dedicated stage directory
+- Performs no pairing logic or sample-level validation
+- Relies entirely on preflight guarantees for input correctness
 
 ### Outputs
 ```text
-output/1_fastqc/
-├── sample1_fastqc.zip
+output/fastqc/
 ├── sample1_fastqc.html
-├── sample2_fastqc.zip
-└── sample2_fastqc.html
+├── sample1_fastqc.zip
+└── ...
 ```
 
-Logs for this stage are written to:
+Logs are written per job:
+
 ```text
 logs/1_fastqc.<jobid>.log
 ```
 
 ### Guarantees
-- Safe to rerun
-- Uses only SLURM‑allocated resources
-- No shared state between samples beyond the output directory
-- Fails if input data are missing or invalid
+- One file per execution unit
+- No dependency on paired-end structure
+- Deterministic file discovery via find
+- No shared state between inputs
+- Restart-safe behaviour (does not regenerate missing upstream data)
+- Assumes all input validation completed during preflight
 
 ## `2_multiqc.sh`
+Execution module for aggregating FastQC results using MultiQC.
 
-Aggregates FastQC results into a consolidated MultiQC report.
+### Role
+Aggregates all FastQC outputs into a single, consolidated quality report.
 
 ### Inputs
-- FastQC output directory from 1_fastqc.sh
-- Pre‑existing MultiQC conda environment
-- SLURM resources (defined in pipeline.sh)
+- FastQC output directory (`FASTQC_OUTDIR`)
+- Pipeline-owned variables (`MULTIQC_OUTDIR`, `ENV_NAME`)
+- SLURM-injected variables (`SLURM_CPUS_PER_TASK`, `SLURM_MEM_PER_CPU`)
+- Execution ABI (`EXPORT_ARRAY`, `SBATCH_EXPORTS`)
 
 ### Workflow
-- Validates the presence of FastQC output files
-- Loads the system anaconda module
-- Initializes and activates the pinned MultiQC conda environment
-- Unsets cluster‑wide Python environment variables (e.g. PYTHONPATH)
-- Runs MultiQC on all FastQC ZIP files
-- Produces a single HTML report and associated data directory
-- Cleans up any temporary files on exit
+- Executes only after successful completion of FastQC (`afterok` dependency)
+- Activates the preflight-generated conda environment
+- Cleans potentially conflicting environment variables (e.g. `PYTHONPATH`)
+- Runs MultiQC on the entire FastQC output directory
+- Aggregates results into a single report
+- Cleans up temporary directories automatically using a trap
 
 ### Outputs
 ```text
-output/2_multiqc/
+output/multiqc/
 ├── multiqc_report.html
 └── multiqc_report_data/
 ```
 
-Logs for this stage are written to:
+Logs are written per job:
+
 ```text
 logs/2_multiqc.<jobid>.log
 ```
 
 ### Guarantees
-- Executes only after successful FastQC completion
-- Deterministic aggregation of all input samples
-- No modification of upstream FastQC results
-- Safe to rerun if outputs already exist
+- Executes only if FastQC completes successfully
+- Deterministic aggregation of all FastQC outputs
+- No modification of upstream FastQC data
+- Clean, isolated output directory
+- No validation logic (assumes preflight invariants)
 
 # Notes
-- All SLURM resource requests are centralized in pipeline.sh
-- The MultiQC conda environment name is fixed by the pipeline and not user‑configurable
-- Temporary files and scratch directories are cleaned up automatically
-- No module requires interactive user input
+- All modules assume preflight validation has completed successfully
+- No module installs software or performs environment configuration
+- The conda environment used by MultiQC is created deterministically during preflight
+- All filesystem paths are absolute and derived from the execution ABI
+- All required variables are guarded at entry
+- No module requires interactive input
+- The pipeline is safe to re-run (does not recreate existing environments or outputs unnecessarily)
+- Downstream pipelines (trimming, alignment, etc.) may safely consume outputs

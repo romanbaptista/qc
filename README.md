@@ -1,134 +1,151 @@
-# QC Pipeline
+# `fastq-qc`
 
 # Overview
+This repository contains the `fastq-qc` pipeline — a modular, HPC‑compatible workflow for:
 
-This repository contains the qc pipeline — a modular, SLURM‑compatible workflow for:
+> Quality control of compressed FASTQ sequencing data using FastQC and MultiQC in a reproducible, restart-safe, > > and execution-contract–driven manner.
 
-> Running quality control on compressed FASTQ sequencing data using FastQC and MultiQC in a reproducible, HPC‑friendly manner.
+The pipeline is designed to operate on raw sequencing outputs and provides a deterministic QC stage that can be chained into downstream pipelines such as trimming, alignment, or variant calling.
 
-The pipeline is designed specifically for HPC environments and handles:
-- Validation of user input FASTQ directories
-- Automated FastQC execution across all samples
-- Aggregation of QC metrics with MultiQC
-- Robust conda environment setup for MultiQC
-- Safe sequential job execution using SLURM dependencies
-- Centralised, reproducible logging
+The pipeline is designed specifically for HPC environments and supports:
+- Explicit environment contracts for deterministic execution across SLURM boundaries
+- Strict separation of configuration, validation, orchestration, and execution layers
+- Comprehensive preflight validation before any SLURM jobs are submitted
+- Fully deterministic conda environment setup using a pinned YAML definition
+- Restart-safe execution with isolated stage outputs
+- Canonical pipeline structure defined via shared arrays and enforced contracts
 
-All pipeline outputs are written to a dedicated output/ directory, enabling seamless integration with downstream workflows (trimming, alignment, variant calling, etc.).
+All pipeline outputs are written to a dedicated `output/` directory, enabling clean integration with downstream workflows.
 
 # Repository Structure
-
 ```text
-qc/
-├── README.md                       # Top-level overview (this file)
-├── config.sh                       # User configuration (input paths, resources)
-├── run_pipeline.sh                 # Entry point (tmux + orchestration)
-├── utils/                          # Shared utilities
-│   ├── variables.sh                # Pipeline metadata and constants
-│   └── functions.sh                # Reusable helper functions
-│   └── env_qc.yaml                 # YAML file for generating conda environment
-├── modules/                        # Pipeline modules (executed under SLURM)
-│   ├── pipeline.sh                 # SLURM pipeline orchestrator
-│   ├── conda_env.sh                # Conda environment setup for MultiQC
-│   ├── 1_fastqc.sh                 # FastQC execution
-│   └── 2_multiqc.sh                # MultiQC aggregation
-└── output/                         # Pipeline-generated data (created at runtime)
+fastq-qc/
+├── README.md                               # Top-level overview (this file)
+├── config.sh                               # User configuration (inputs and parameters)
+├── run_pipeline.sh                         # Entry point (login-node orchestration)
+├── utils/                                  # Shared utilities and canonical definitions
+│   ├── arrays.sh                           # Source of truth for pipeline structure and ABI
+│   ├── functions_base.sh                   # General-purpose helper functions
+│   └── functions_env.sh                    # Conda environment setup helpers
+├── preflight/                              # Preflight validation layer
+│   ├── preflight.sh
+│   ├── preflight_input.sh
+│   ├── preflight_variables.sh
+│   ├── preflight_scripts.sh
+│   ├── preflight_commands.sh
+│   └── preflight_env.sh
+├── modules/                                # Execution modules
+│   ├── pipeline.sh                         # Internal orchestrator (SLURM job)
+│   ├── 1_fastqc.sh                         # FastQC execution module
+│   └── 2_multiqc.sh                        # MultiQC aggregation module
+└── output/                                 # Pipeline-generated results (created at runtime)
 ```
 
 # Workflow
+At a high level, the pipeline proceeds as follows:
 
-At a high level, the QC pipeline proceeds as follows:
+### Preflight validation
+- Verifies all required framework-level commands are available
+- Confirms all required user configuration variables are set and non-empty
+- Validates presence and integrity of module scripts
+- Confirms the input directory exists and contains `.fastq.gz` files
+- Ensures the required MultiQC conda environment exists or creates it deterministically via `tmux`
+- Guarantees all execution invariants before any SLURM jobs are submitted
 
-### Environment setup
-- Verifies the presence of the required MultiQC conda environment
-- Automatically creates the environment if missing, using a pinned YAML file
-- Optionally performs environment creation inside a tmux session to allow safe user disconnects
+All validation is authoritative and occurs before any SLURM jobs are submitted.
 
-### FastQC
-- Submits a SLURM job to run FastQC on all `.fastq.gz` files in the user‑supplied input directory
-- Uses configurable CPU and memory resources per job
-- Writes per‑job and per‑sample logs for traceability
+### Pipeline orchestration
+- Submits an internal orchestrator job (`modules/pipeline.sh`) from the login node
+- Defines a strict execution ABI via `EXPORT_ARRAY`
+- Passes only explicitly declared variables to downstream jobs via `--export`
+- Dispatches sequential QC modules using SLURM dependency chaining
 
-### MultiQC
-- Submits a dependent SLURM job that runs only after FastQC completes successfully
-- Aggregates all FastQC results into a single MultiQC report
-- Produces an HTML report and associated data directory
+### FastQC stage
+- Executes `1_fastqc.sh` under SLURM
+- Iterates over all `.fastq.gz` files in the input directory
+- Generates per-file FastQC outputs
+- Writes results to a dedicated stage directory
 
-All pipeline steps are coordinated through SLURM job dependencies to ensure deterministic, sequential execution without manual intervention.
+### MultiQC stage
+- Executes `2_multiqc.sh` only after successful FastQC completion
+- Activates a deterministic conda environment
+- Aggregates FastQC results into a single report
+- Writes outputs to a dedicated stage directory
+
+Modules assume all preflight guarantees are satisfied and do not revalidate inputs.
 
 # Configuration
-
 All user‑tunable parameters are defined in `config.sh`.
 
 | Variable | Description |
-|--------|-------------|
-| `INPUT_DIR` | Directory containing input `.fastq.gz` files to be processed by the QC pipeline |
-| `TMUX_FOR_CONDA_SETUP` | Whether to use a tmux session for conda environment creation during pipeline setup |
+|----------|-------------|
+| `INPUT_DIR` | Directory containing `.fastq.gz` files to process |
 | `TMUX_SESSION_NAME` | Name of the tmux session used for conda environment creation |
-| `FASTQC_CPUS` | CPUs allocated per FastQC SLURM job |
+| `FASTQC_CPUS` | Number of CPU threads allocated per FastQC task |
 | `FASTQC_MEM_PER_CPU` | Memory allocated per CPU for FastQC |
-| `MULTIQC_CPUS` | CPUs allocated for the MultiQC SLURM job |
+| `MULTIQC_CPUS` | Number of CPU threads allocated for MultiQC |
 | `MULTIQC_MEM_PER_CPU` | Memory allocated per CPU for MultiQC |
 
-At minimum, the user must define the input directory containing FASTQ files:
+# Required Input Layout
+The pipeline does not enforce a strict directory structure. Any `.fastq.gz` files located beneath `INPUT_DIR` will be processed.
+Example:
 
-```bash
-INPUT_DIR="/path/to/fastq_files"
+```text
+INPUT_DIR/
+├── sample1.fastq.gz
+├── sample2.fastq.gz
 ```
 
-All other parameters have sensible defaults and can be adjusted based on cluster policy or dataset size.
+or, as generated by the `sra-convert` pipeline:
+
+```text
+INPUT_DIR/
+└── SRRXXXXXXXX/
+    ├── SRRXXXXXXXX_1.fastq.gz
+    ├── SRRXXXXXXXX_2.fastq.gz
+```
 
 # Usage
-
-Navigate to the folder containing the pipeline and run:
+Navigate to the root of the repository and run:
 
 ```bash
 bash run_pipeline.sh
 ```
 
 This will:
-- Perform all preflight checks
+- Perform all preflight validation checks
 - Verify or create the required conda environment
-- Submit the QC pipeline to SLURM
-- Exit cleanly after submission
+- Submit the QC workflow to the cluster via SLURM
 
-If tmux is enabled for environment setup, users may safely detach and re‑attach without interrupting long‑running steps.
+The pipeline is restart‑safe; re-running the entrypoint will not recreate existing environments or overwrite completed outputs.
 
 # Outputs
-
 All pipeline outputs are written under `output/`, grouped by stage.
-
-Example structure after a complete run:
+Example structure after completion:
 
 ```text
 output/
-├── 1_fastqc/
-│   ├── sample1_fastqc.zip
+├── fastqc/
 │   ├── sample1_fastqc.html
-│   ├── sample2_fastqc.zip
-│   └── sample2_fastqc.html
-└── 2_multiqc/
+│   ├── sample1_fastqc.zip
+│   └── ...
+└── multiqc/
     ├── multiqc_report.html
     └── multiqc_report_data/
 ```
 
-Logs are written centrally under `logs/` and include:
-- `run_pipeline.log`
-- `pipeline.<jobid>.log`
-- `1_fastqc.<jobid>.log`
-- `2_multiqc.<jobid>.log`
-
-This structure allows failures or performance issues to be diagnosed at each stage without inspecting unrelated output.
+Each stage is isolated, enabling straightforward inspection and downstream use.
 
 # Further Documentation
-
-For a detailed explanation of each pipeline module, implementation details, and SLURM submission logic, see `modules/README.md`
+For detailed documentation on individual components, see:
+- `preflight/README.md` — validation guarantees and execution ordering
+- `modules/README.md` — execution model and module contracts
+- `utils/README.md` — shared utilities and ABI definitions
 
 # Citation
-
 If you use this pipeline in published work, please cite:
 
-> Baptista, R. _qc: A SLURM‑compatible pipeline for FastQC and MultiQC‑based sequencing quality control_.
-> GitHub repository: https://github.com/romanbaptista/qc
+> Baptista, R. _fastq-qc: A contract-driven HPC pipeline for FASTQ quality control_.
+> GitHub repository: https://github.com/romanbaptista/fastq-qc
 
-Optionally include the specific commit hash or release tag used for analysis.
+Optionally include the commit hash or release tag used for analysis.
